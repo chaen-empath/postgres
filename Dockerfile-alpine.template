@@ -1,5 +1,6 @@
 # vim:set ft=dockerfile:
-FROM alpine:%%ALPINE-VERSION%%
+#FROM alpine:%%ALPINE-VERSION%%
+FROM alpine:3.11.6
 
 # 70 is the standard uid/gid for "postgres" in Alpine
 # https://git.alpinelinux.org/aports/tree/main/postgresql/postgresql.pre-install?h=3.11-stable
@@ -17,9 +18,15 @@ ENV LANG en_US.utf8
 
 RUN mkdir /docker-entrypoint-initdb.d
 
-ENV PG_MAJOR %%PG_MAJOR%%
-ENV PG_VERSION %%PG_VERSION%%
-ENV PG_SHA256 %%PG_SHA256%%
+#ENV PG_MAJOR %%PG_MAJOR%%
+#ENV PG_VERSION %%PG_VERSION%%
+#ENV PG_SHA256 %%PG_SHA256%%
+
+ENV PG_MAJOR 11
+ENV PG_VERSION 11.7
+#11.2 ENV PG_SHA256 2676b9ce09c21978032070b6794696e0aa5a476e3d21d60afc036dc0a9c09405
+ENV PG_SHA256 324ae93a8846fbb6a25d562d271bc441ffa8794654c5b2839384834de220a313
+#11.8 ENV PG_SHA256 eaf2f4329ccc349c89e950761b81daf8c99bb8966abcab5665ccd6ee95c77ae2
 
 RUN set -ex \
 	\
@@ -27,6 +34,8 @@ RUN set -ex \
 		ca-certificates \
 		openssl \
 		tar \
+                zip \
+                unzip \
 	\
 	&& wget -O postgresql.tar.bz2 "https://ftp.postgresql.org/pub/source/v$PG_VERSION/postgresql-$PG_VERSION.tar.bz2" \
 	&& echo "$PG_SHA256 *postgresql.tar.bz2" | sha256sum -c - \
@@ -126,12 +135,23 @@ RUN set -ex \
 # tzdata is optional, but only adds around 1Mb to image size and is recommended by Django documentation:
 # https://docs.djangoproject.com/en/1.10/ref/databases/#optimizing-postgresql-s-configuration
 		tzdata \
+#	&& apk del .fetch-deps .build-deps \
+	&& cd /usr/src \
+        && wget -O pg_cheat_funcs.zip https://github.com/MasaoFujii/pg_cheat_funcs/archive/master.zip \
+        && unzip pg_cheat_funcs.zip \
+        && rm pg_cheat_funcs.zip \
+        && mv pg_cheat_funcs-master pg_cheat_funcs \
+        && cd pg_cheat_funcs \
+        && make USE_PGXS=1 PG_CONFIG=/usr/local/bin/pg_config \ 
+        && make USE_PGXS=1 PG_CONFIG=/usr/local/bin/pg_config install \ 
+	&& cd /usr/src/postgresql \
 	&& apk del .fetch-deps .build-deps \
 	&& cd / \
 	&& rm -rf \
 		/usr/src/postgresql \
 		/usr/local/share/doc \
 		/usr/local/share/man \
+		/usr/src/pg_cheat_funcs \
 	&& find /usr/local -name '*.a' -delete
 
 # make the sample config easier to munge (and "correct by default")
@@ -145,8 +165,8 @@ RUN mkdir -p "$PGDATA" && chown -R postgres:postgres "$PGDATA" && chmod 777 "$PG
 VOLUME /var/lib/postgresql/data
 
 COPY docker-entrypoint.sh /usr/local/bin/
-RUN ln -s usr/local/bin/docker-entrypoint.sh / # backwards compat
-ENTRYPOINT ["docker-entrypoint.sh"]
+# RUN ln -s usr/local/bin/docker-entrypoint.sh / # backwards compat
+# ENTRYPOINT ["docker-entrypoint.sh"]
 
 EXPOSE 5432
-CMD ["postgres"]
+# CMD ["postgres"]
